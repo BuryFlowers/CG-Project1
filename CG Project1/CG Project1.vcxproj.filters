@@ -50,4 +50,12 @@
       <Filter>源文件</Filter>
     </CudaCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="default.vs">
+      <Filter>源文件</Filter>
+    </None>
+    <None Include="default.fs">
+      <Filter>源文件</Filter>
+    </None>
+  </ItemGroup>
 </Project>

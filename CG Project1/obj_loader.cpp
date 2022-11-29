@@ -79,18 +79,57 @@ void load_obj_file(const char* filename) {
 
 		else if (strlen(type) == 1 && type[0] == 'f') {
 
-			int p1, p2, p3;
-			int n1, n2, n3;
-			int t1, t2, t3;
-			char c;
-			if (sscanf(data, "%s %d %c %d %c %d %d %c %d %c %d %d %c %d %c %d", type, &p1, &c, &p2, &c, &p3, &n1, &c, &n2, &c, &n3, &t1, &c, &t2, &c, &t3) != 16) {
+			int p[3] = { -1 };
+			int n[3] = { -1 };
+			int t[3] = { -1 };
+			char s[3][MAX_LENGTH];
+			if (sscanf(data, "%s %s %s %s", type, s[0], s[1], s[2]) != 4) {
 
 				printf("[Error] can't read indices from obj file!\n");
 				exit(0);
 
 			}
 
-			indices_queue.push_back(triangle(p1, p2, p3, n1, n2, n3, t1, t2, t3));
+			else for (int i = 0; i < 3; i++) {
+
+					int tmp = 0, j = 0;
+					while (s[i][j] != '/' && s[i][j] != ' ' && j < strlen(s[i])) {
+
+						tmp *= 10;
+						tmp += s[i][j] - '0';
+						j++;
+
+					}
+
+					p[i] = tmp - 1;
+					j++;
+					tmp = 0;
+
+					while (s[i][j] != '/' && s[i][j] != ' ' && j < strlen(s[i])) {
+
+						tmp *= 10;
+						tmp += s[i][j] - '0';
+						j++;
+
+					}
+
+					if (s[i][j] == '/' && j < strlen(s[i])) n[i] = tmp - 1, j++;
+					tmp = 0;
+
+					while (s[i][j] != '/' && s[i][j] != ' ' && j < strlen(s[i])) {
+
+						tmp *= 10;
+						tmp += s[i][j] - '0';
+						j++;
+
+					}
+
+					if (s[i][j] == '/' && j < strlen(s[i])) t[i] = tmp - 1, j++;
+					tmp = 0;
+
+			}
+
+			indices_queue.push_back(triangle(p[0], p[1], p[2], n[0], n[1], n[2], t[0], t[1], t[2]));
 
 		}
 

@@ -14,11 +14,11 @@ float lastFrame = 0.0f;
 
 //camera
 camera* cam;
-float camSpeed = 15.0f;
+float camSpeed = 5.0f;
 
 //cursor
 vec2 lastCursor;
-float cursorSensitivity = 0.3f;
+float cursorSensitivity = 0.1f;
 bool firstMouse = true;
 float blend = 0.2f;
 
@@ -30,18 +30,22 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
 void mouse_callback(GLFWwindow* window, double posX, double posY) {
 
-	vec2 cursorPos = vec2(posX, posY);
-	if (firstMouse) lastCursor = cursorPos, firstMouse = false;
-	float offsetX = cursorPos.x - lastCursor.x;
-	float offsetY = lastCursor.y - cursorPos.y;
-	lastCursor = cursorPos;
+	float xpos = static_cast<float>(posX);
+	float ypos = static_cast<float>(posY);
 
-	deltaTime = glfwGetTime() - lastFrame;
-	lastFrame += deltaTime;
-	offsetX *= cursorSensitivity;
-	offsetY *= cursorSensitivity;
+	if (firstMouse)
+	{
+		lastCursor = vec2(xpos, ypos);
+		firstMouse = false;
+	}
 
-	cam->ProcessMouseMovement(offsetX, offsetY, (GLboolean)true);
+	float xoffset = xpos - lastCursor.x;
+	float yoffset = lastCursor.y - ypos; // reversed since y-coordinates go from bottom to top
+
+	lastCursor.x = xpos;
+	lastCursor.y = ypos;
+
+	cam->ProcessMouseMovement(xoffset, yoffset, true);
 
 }
 
@@ -52,6 +56,9 @@ void scroll_callback(GLFWwindow* window, double offsetX, double offsetY) {
 }
 
 void processInput(GLFWwindow* window) {
+
+	deltaTime = glfwGetTime() - lastFrame;
+	lastFrame = glfwGetTime();
 
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
@@ -68,8 +75,6 @@ void processInput(GLFWwindow* window) {
 
 	}
 
-	deltaTime = glfwGetTime() - lastFrame;
-	lastFrame += deltaTime;
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cam->ProcessKeyboard(FORWARD, deltaTime);
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cam->ProcessKeyboard(BACKWARD, deltaTime);
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cam->ProcessKeyboard(LEFT, deltaTime);

@@ -34,6 +34,9 @@ public:
 
 	}
 
+	int A() { return p[0]; }
+	int B() { return p[1]; }
+	int C() { return p[2]; }
 
 private:
 
