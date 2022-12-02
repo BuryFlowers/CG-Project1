@@ -30,6 +30,9 @@
     <ClCompile Include="obj_loader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="geometryFunc.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h">
@@ -44,11 +47,9 @@
     <ClInclude Include="triangle.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <CudaCompile Include="kernel.cu">
-      <Filter>源文件</Filter>
-    </CudaCompile>
+    <ClInclude Include="scanline_zbuffer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="default.vs">

@@ -80,5 +80,6 @@ void processInput(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cam->ProcessKeyboard(LEFT, deltaTime);
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cam->ProcessKeyboard(RIGHT, deltaTime);
 
+	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) cam->PrintCameraConfig();
 
 }

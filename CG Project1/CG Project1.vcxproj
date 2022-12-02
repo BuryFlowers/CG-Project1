@@ -138,6 +138,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="geometryFunc.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="obj_loader.cpp" />
@@ -146,12 +147,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />
+    <ClInclude Include="scanline_zbuffer.h" />
     <ClInclude Include="triangle.h" />
     <ClInclude Include="shader.h" />
     <ClInclude Include="vertex.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>
     <None Include="default.fs" />

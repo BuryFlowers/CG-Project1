@@ -1,6 +1,9 @@
 #pragma once
 #ifndef TRIANGLE
 #define TRIANGLE
+#include <iostream>
+#include <string>
+#include <algorithm>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -37,6 +40,20 @@ public:
 	int A() { return p[0]; }
 	int B() { return p[1]; }
 	int C() { return p[2]; }
+	void swapAB() { 
+
+		std::swap(p[0], p[1]); 
+		std::swap(n[0], n[1]); 
+		std::swap(t[0], t[1]); 
+	
+	}
+	void swapBC() {
+
+		std::swap(p[1], p[2]);
+		std::swap(n[1], n[2]);
+		std::swap(t[1], t[2]);
+
+	}
 
 private:
 
@@ -46,11 +63,19 @@ private:
 
 };
 
+struct plane {
+
+
+	float a, b, c, d;
+
+};
+
 struct triangles {
 
-	float* position;
-	float* normal;
-	float* uv;
+	vec3* position;
+	vec3* ndc_position;
+	vec3* normal;
+	vec2* uv;
 	triangle* triangle_indices;
 
 };

@@ -4,12 +4,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <time.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "cuda_runtime_api.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "camera.h"
 #include "shader.h"
 #include "triangle.h"
+#include "scanline_zbuffer.h"
 
 #include <omp.h>
 #define NOMINMAX
@@ -22,9 +26,6 @@
 	double  tmp_timing_duration = tmp_timing_finish - tmp_timing_start;\
 	printf("\r%s: %2.5f ms           ", (message), tmp_timing_duration * 1000);}}
 
-
-#define WIDTH 1280
-#define HEIGHT 720
 
 using namespace glm;
 using namespace std;
@@ -50,15 +51,20 @@ extern vector<vec2> uv_queue;
 extern vector<triangle> indices_queue;
 
 triangles mesh;
+polygon_table* PT[HEIGHT];
+edge_table* ET[HEIGHT];
+active_polygon_table* APT;
+active_edge_table* AET;
+float* zbuffer;
 
 unsigned char* PixelBuffer = new unsigned char[WIDTH * HEIGHT * 3];
 
 float vertices[] = {
 	//  ---- position ----    ---- color ----     - texcoord -
-		 1.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,   
-		 1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,   
-		-1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f,   
-		-1.0f,  1.0f, 0.0f,   1.0f, 1.0f, 0.0f,   1.0f, 0.0f   
+		 1.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   
+		 1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   
+		-1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   
+		-1.0f,  1.0f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f   
 };
 unsigned int indices[] = {
 		0, 1, 3, // first triangle
@@ -76,43 +82,44 @@ void mouse_callback(GLFWwindow* window, double posX, double posY);
 void scroll_callback(GLFWwindow* window, double offsetX, double offsetY);
 void processInput(GLFWwindow* window);
 
+inline int getYCoord(float y) { return (int)((y + 1.0f) * 0.5f * HEIGHT + 0.5f); }
+inline float getXCoord(float x) { return (x + 1.0f) * 0.5f * WIDTH; }
+void attachToEdge(vec3& p1, vec3& p2);
+bool shouldBeThrown(vec3 s, vec3 t);
+
 int main() {
 
-	load_obj_file("data/cube.obj");
+	load_obj_file("data/diamond.obj");
 
-	mesh.position = new float[position_queue.size() * 3];
-	for (int i = 0; i < position_queue.size(); i++) {
+	mesh.position = new vec3[position_queue.size()];
+	mesh.ndc_position = new vec3[position_queue.size()];
+	for (int i = 0; i < position_queue.size(); i++) mesh.position[i] = position_queue[i];
 
-		mesh.position[i * 3] = position_queue[i].x;
-		mesh.position[i * 3 + 1] = position_queue[i].y;
-		mesh.position[i * 3 + 2] = position_queue[i].z;
-		//printf("%.2lf %.2lf %.2lf\n", mesh.position[i * 3], mesh.position[i * 3 + 1], mesh.position[i * 3 + 2]);
+	mesh.normal = new vec3[normal_queue.size()];
+	for (int i = 0; i < normal_queue.size(); i++) mesh.normal[i] = normal_queue[i];
 
-	}
 
-	mesh.normal = new float[normal_queue.size() * 3];
-	for (int i = 0; i < normal_queue.size(); i++) {
-
-		mesh.normal[i * 3] = normal_queue[i].x;
-		mesh.normal[i * 3 + 1] = normal_queue[i].y;
-		mesh.normal[i * 3 + 2] = normal_queue[i].z;
-
-	}
-
-	mesh.uv = new float[uv_queue.size() * 2];
-	for (int i = 0; i < uv_queue.size(); i++) {
-
-		mesh.uv[i * 2] = uv_queue[i].x;
-		mesh.uv[i * 2 + 1] = uv_queue[i].y;
-
-	}
+	mesh.uv = new vec2[uv_queue.size()];
+	for (int i = 0; i < uv_queue.size(); i++) mesh.uv[i] = uv_queue[i];
 
 	mesh.triangle_indices = new triangle[indices_queue.size()];
-	for (int i = 0; i < indices_queue.size(); i++)
-		mesh.triangle_indices[i] = indices_queue[i];
+	for (int i = 0; i < indices_queue.size(); i++) mesh.triangle_indices[i] = indices_queue[i];
+
+	std::srand(std::time(0));
+	vec3* color = new vec3[indices_queue.size()];
+	for (int i = 0; i < indices_queue.size(); i++) {
+
+		color[i].x = std::rand() % 255;
+		color[i].y = std::rand() % 255;
+		color[i].z = std::rand() % 255;
+
+	}
+
+	zbuffer = new float[WIDTH];
 
 	//camera set up
-	cam = new camera(vec3(0.0f, 0.0f, -10.0f), vec3(0.0f, 1.0f, 0.0f), -90.0f, 0.0f);
+	//cam = new camera(vec3(0.0f, 0.0f, -5.0f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 0.0f);
+	cam = new camera(vec3(2.991081f, -0.398678f, 3.074921f), vec3(0.0f, 1.0f, 0.0f), 213.900330f, -0.499985f);
 	cam->MouseSensitivity = cursorSensitivity;
 	cam->MovementSpeed = camSpeed;
 	lastCursor = vec2(WIDTH * 0.5f, HEIGHT * 0.5f);
@@ -199,68 +206,354 @@ int main() {
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		for (int i = 0; i < WIDTH * HEIGHT * 3; i++) PixelBuffer[i] = 0;
-		mat4 transform = perspective(radians(cam->Zoom), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f) * cam->GetViewMatrix();
+		for (int i = 0; i < WIDTH * HEIGHT; i++) {
+
+			PixelBuffer[i * 3] = (int)(255 * 0.2f);
+			PixelBuffer[i * 3 + 1] = (int)(255 * 0.3f);
+			PixelBuffer[i * 3 + 2] = (int)(255 * 0.3f);
+
+		}
+		for (int i = 0; i < HEIGHT; i++) {
+
+			PT[i] = NULL;
+			ET[i] = NULL;
+
+		}
+		mat4 transform = perspective(radians(cam->Zoom), RATIO, 0.1f, 100.0f) * cam->GetViewMatrix();
+		for (int i = 0; i < position_queue.size(); i++) {
+
+			vec4 tmp;
+			tmp = transform * vec4(mesh.position[i], 1.0f);
+			mesh.ndc_position[i] = vec3(tmp / tmp.w);
+
+		}
+
+		polygon_table* polygon = new polygon_table[indices_queue.size()];
+		edge_table* edge[3];
+		edge[0] = new edge_table[indices_queue.size()];
+		edge[1] = new edge_table[indices_queue.size()];
+		edge[2] = new edge_table[indices_queue.size()];
 		for (int i = 0; i < indices_queue.size(); i++) {
 
-			int A = mesh.triangle_indices[i].A();
-			int B = mesh.triangle_indices[i].B();
-			int C = mesh.triangle_indices[i].C();
-			float* position = mesh.position;
-			vec4 p[3];
-			p[0] = vec4(position[A * 3], position[A * 3 + 1], position[A * 3 + 2], 1.0f);
-			p[1] = vec4(position[B * 3], position[B * 3 + 1], position[B * 3 + 2], 1.0f);
-			p[2] = vec4(position[C * 3], position[C * 3 + 1], position[C * 3 + 2], 1.0f);
-			p[0] = transform * p[0];
-			p[1] = transform * p[1];
-			p[2] = transform * p[2];
+			int e[3];
+			e[0] = mesh.triangle_indices[i].A();
+			e[1] = mesh.triangle_indices[i].B();
+			e[2] = mesh.triangle_indices[i].C();
+			vec3* ndc_p = mesh.ndc_position;
+			vec3 AB = vec3(ndc_p[e[0]] - ndc_p[e[1]]);
+			vec3 CB = vec3(ndc_p[e[2]] - ndc_p[e[1]]);
+			vec3 normal = cross(AB, CB);
+			normal = normalize(normal);
+			polygon[i].plane.x = normal.x;
+			polygon[i].plane.y = normal.y;
+			polygon[i].plane.z = normal.z;
+			polygon[i].plane.w = -dot(normal, ndc_p[e[1]]);
+			polygon[i].color.x = color[i].x;
+			polygon[i].color.y = color[i].y;
+			polygon[i].color.z = color[i].z;
+			if (fabs(polygon[i].plane.z) < EPSILON) continue;
 
+			int ymax = -1, ymin = HEIGHT;
+			float zl, xl;
 			for (int j = 0; j < 3; j++) {
 
-				vec3 t = vec3((p[(j + 1) % 3].x + 1) / 2.0 * WIDTH, (p[(j + 1) % 3].y + 1) / 2.0 * HEIGHT, p[(j + 1) % 3].z);
-				vec3 s = vec3((p[j].x + 1) / 2.0 * WIDTH, (p[j].y + 1) / 2.0 * HEIGHT, p[j].z);
-				if (t.x < s.x) swap(s, t);
-				float k = (t.y - s.y) / (t.x - s.x);
+				edge[j][i].polygon_id = i;
+				vec3 s = ndc_p[e[j]], t = ndc_p[e[(j + 1) % 3]];
+				if (s.y > t.y) swap(s, t);
+				edge[j][i].out = false;
+				if (shouldBeThrown(s, t)) {
 
-				if (fabs(k) > 1.0f) {
+					edge[j][i].out = true;
+					continue;
 
-					for (int y = std::max((int)s.y, 0); y < std::min((int)t.y, HEIGHT); y++) {
+				}
+				edge[j][i].dx = -RATIO * (s.x - t.x) / (s.y - t.y);
+				vec3 direction = t - s;
+				direction = normalize(direction);
+				if (s.x < t.x) attachToEdge(s, t);
+				else attachToEdge(t, s);
+				vec3 aDirection = t - s;
+				aDirection = normalize(aDirection);
+				int top = getYCoord(t.y), down = getYCoord(s.y);
+				edge[j][i].dy = top - down;
+				edge[j][i].x = getXCoord(t.x);
+				if (edge[j][i].dy == 0) {
 
-						int x = ((float)y - s.y) / k + s.x;
-						float z = ((float)y - s.y) / (t.y - s.y) * (t.z - s.z) + s.z;
-						int index = (int)(x + y * WIDTH);
-						if (index < WIDTH * HEIGHT && index > 0 && z > -1) {
+					edge[j][i].out = true;
+					continue;
 
-							PixelBuffer[index * 3] = 255;
-							PixelBuffer[index * 3 + 1] = 255;
-							PixelBuffer[index * 3 + 2] = 255;
+				}
+				if (top > ymax) {
+
+					ymax = top;
+					xl = getXCoord(t.x);
+					zl = t.z;
+
+				}
+				else if (top == ymax && getXCoord(t.x) < xl) {
+
+					xl = getXCoord(t.x);
+					zl = t.z;
+
+				}
+ 				if (down < ymin) ymin = down;
+				edge[j][i].next = NULL;
+
+				if (top >= HEIGHT || top < 0) {
+
+					bool x = true;
+
+				}
+
+				if (ET[top] != NULL) edge[j][i].next = ET[top];
+				ET[top] = &edge[j][i];
+
+				polygon[i].e[j] = &edge[j][i];
+
+			}
+
+			if (ymax == -1 || ymin == HEIGHT) continue;
+			polygon[i].zl = zl;
+			polygon[i].dzx = - 2.0f * polygon[i].plane.x / (polygon[i].plane.z * WIDTH);
+			polygon[i].dzy = 2.0f * polygon[i].plane.y / (polygon[i].plane.z * HEIGHT);
+			polygon[i].dy = ymax - ymin;
+			polygon[i].polygon_id = i;
+			polygon[i].next = NULL;
+			polygon[i].aet = NULL;
+			polygon[i].apt = NULL;
+			if (PT[ymax] != NULL) polygon[i].next = PT[ymax];
+			PT[ymax] = &polygon[i];
+
+		}
+
+		active_polygon_table* APT_head = NULL;
+		active_edge_table* AET_head = NULL;
+		int count = 0;
+		for (int i = HEIGHT - 1; i >= 0; i--) {
+
+			for (int j = 0; j < WIDTH; j++) zbuffer[j] = 1000;
+
+			polygon_table* current_PT = PT[i];
+			while (current_PT != NULL) {
+
+				active_polygon_table* new_APT = new active_polygon_table;
+				new_APT->color = current_PT->color;
+				new_APT->dy = current_PT->dy;
+				new_APT->polygon_id = current_PT->polygon_id;
+				new_APT->edges = 0;
+				new_APT->next = NULL;
+				if (APT_head != NULL) new_APT->next = APT_head;
+				APT_head = new_APT;
+				current_PT->apt = new_APT;
+
+				current_PT = current_PT->next;
+
+			}
+
+			edge_table* current_ET = ET[i];
+			while (current_ET != NULL) {
+
+				if (!current_ET->out) {
+
+					polygon_table* current_polygon = &polygon[current_ET->polygon_id];
+					active_edge_table* current_AET;
+					if (current_polygon->apt->edges == 0) {
+
+						current_AET = new active_edge_table;
+						current_AET->dxl = current_ET->dx;
+						current_AET->dyl = current_ET->dy;
+						current_AET->xl = current_ET->x;
+						current_AET->polygon_id = current_ET->polygon_id;
+						current_AET->zl = current_polygon->zl;
+						current_AET->dzx = current_polygon->dzx;
+						current_AET->dzy = current_polygon->dzy;
+						current_AET->next = NULL;
+						current_polygon->aet = current_AET;
+						current_polygon->apt->edges++;
+						if (AET_head != NULL) current_AET->next = AET_head;
+						AET_head = current_AET;
+
+					}
+					else if (current_polygon->apt->edges == 1) {
+
+						current_AET = current_polygon->aet;
+						current_AET->dxr = current_ET->dx;
+						current_AET->dyr = current_ET->dy;
+						current_AET->xr = current_ET->x;
+						current_polygon->apt->edges++;
+						if (current_AET->xl > current_AET->xr || (current_AET->xl == current_AET->xr && current_AET->dxl > current_AET->dxr)) {
+
+							swap(current_AET->xl, current_AET->xr);
+							swap(current_AET->dxl, current_AET->dxr);
+							swap(current_AET->dyl, current_AET->dyr);
 
 						}
+
+					}
+					else {
+
+						current_AET = current_polygon->aet;
+						if (current_AET->dyl == 0) {
+
+							current_AET->dxl = current_ET->dx;
+							current_AET->dyl = current_ET->dy;
+							current_AET->xl = current_ET->x;
+
+						}
+						else {
+
+							current_AET->dxr = current_ET->dx;
+							current_AET->dyr = current_ET->dy;
+							current_AET->xr = current_ET->x;
+
+						}
+
+						if (current_AET->xl > current_AET->xr || (current_AET->xl == current_AET->xr && current_AET->dxl > current_AET->dxr)) {
+
+							swap(current_AET->xl, current_AET->xr);
+							swap(current_AET->dxl, current_AET->dxr);
+							swap(current_AET->dyl, current_AET->dyr);
+
+						}
+
+					}
+						
+				}
+
+				current_ET = current_ET->next;
+
+			}
+
+			active_polygon_table* current_APT = APT_head;
+			active_polygon_table* last_APT = NULL;
+
+			while (current_APT != NULL) {
+
+				current_APT->dy--;
+				if (current_APT->dy == 0) {
+
+					if (current_APT == APT_head) {
+
+						APT_head = current_APT->next;
+						delete(current_APT);
+						current_APT = APT_head;
+
+					}
+					else {
+
+						last_APT->next = current_APT->next;
+						delete(current_APT);
+						current_APT = last_APT->next;
 
 					}
 
 				}
-
 				else {
 
-					for (int x = std::max((int)s.x, 0); x < std::min((int)t.x, WIDTH); x++) {
-
-						int y = ((float)x - s.x) * k + s.y;
-						float z = ((float)x - s.x) / (t.x - s.x) * (t.z - s.z) + s.z;
-						int index = (int)(x + y * WIDTH);
-						if (index < WIDTH * HEIGHT && index > 0 && z > -1) {
-
-							PixelBuffer[index * 3] = 255;
-							PixelBuffer[index * 3 + 1] = 255;
-							PixelBuffer[index * 3 + 2] = 255;
-
-						}
-
-					}
+					last_APT = current_APT;
+					current_APT = current_APT->next;
 
 				}
 
 			}
+
+			active_edge_table* current_AET = AET_head;
+
+			while (current_AET != NULL) {
+
+				float z = current_AET->zl;
+				int l = (int)current_AET->xl;
+				int r = (int)current_AET->xr;
+
+				if (l < 0) {
+
+					z += -1.0f * l * current_AET->dzx;
+					l = 0;
+
+				}
+
+				for (; l <= r && l <= WIDTH - 1; l++) {
+
+					if (z < zbuffer[l] - EPSILON && z < 1.0f) {
+
+						zbuffer[l] = z;
+						PixelBuffer[(i * WIDTH + l) * 3] = polygon[current_AET->polygon_id].color.x;
+						PixelBuffer[(i * WIDTH + l) * 3 + 1] = polygon[current_AET->polygon_id].color.y;
+						PixelBuffer[(i * WIDTH + l) * 3 + 2] = polygon[current_AET->polygon_id].color.z;
+						count++;
+
+					}
+					z += current_AET->dzx;
+ 
+				}
+
+				current_AET->dyl--;
+				current_AET->dyr--;
+				current_AET->xl += current_AET->dxl;
+				current_AET->xr += current_AET->dxr;
+				current_AET->zl += current_AET->dzx * current_AET->dxl + current_AET->dzy;
+				current_AET = current_AET->next;
+
+			}
+
+			current_AET = AET_head;
+			active_edge_table* last_AET = NULL;
+			while (current_AET != NULL) {
+
+				if (current_AET->dyl == 0 && current_AET->dyr == 0) {
+
+					if (current_AET == AET_head) {
+
+						AET_head = current_AET->next;
+						delete(current_AET);
+						current_AET = AET_head;
+
+					}
+					else {
+
+						last_AET->next = current_AET->next;
+						delete(current_AET);
+						current_AET = last_AET->next;
+
+					}
+
+				}
+				else {
+
+					last_AET = current_AET;
+					current_AET = current_AET->next;
+
+				}
+
+			}
+
+
+		}
+
+		if (count < 100) {
+
+			bool x = true;
+
+		}
+
+		delete[](polygon);
+		delete[](edge[0]);
+		delete[](edge[1]);
+		delete[](edge[2]);
+
+		while (AET_head != NULL) {
+
+			active_edge_table* current_AET = AET_head->next;
+			delete(AET_head);
+			AET_head = current_AET;
+
+		}
+
+		while (APT_head != NULL) {
+
+			active_polygon_table* current_APT = APT_head->next;
+			delete(APT_head);
+			APT_head = current_APT;
 
 		}
 		

@@ -2,6 +2,13 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#define WIDTH 1280
+#define HEIGHT 720
+#define RATIO ((float)WIDTH / (float)HEIGHT)
+#define MAX_HEIGHT (((float) (HEIGHT - 1.0f) / (float) HEIGHT) * 2.0f - 1.0f)
+#define MAX_WIDTH (((float) (WIDTH - 1.0f) / (float) WIDTH) * 2.0f - 1.0f)
+#define EPSILON 1e-6
+
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -109,8 +116,18 @@ public:
         Zoom -= (float)yoffset;
         if (Zoom < 1.0f)
             Zoom = 1.0f;
-        //if (Zoom > 60.0f)
-            //Zoom = 60.0f;
+        if (Zoom > 60.0f)
+            Zoom = 60.0f;
+    }
+
+    void PrintCameraConfig() {
+
+        printf("\nCamera Position: %lf, %lf, %lf\n", this->Position.x, this->Position.y, this->Position.z);
+        printf("Camera Up: %lf, %lf, %lf\n", this->WorldUp.x, this->WorldUp.y, this->WorldUp.z);
+        printf("Camera Yaw: %lf\n", this->Yaw);
+        printf("Camera Pitch: %lf\n", this->Pitch);
+
+
     }
 
 private:
