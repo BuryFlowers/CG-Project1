@@ -44,15 +44,17 @@ void attachToEdge(vec3 &p1, vec3 &p2) {
 
 	}
 
-	//if (p1.y >= HEIGHT || p2.y >= HEIGHT) printf("\n%lf %lf\n", p1.y, p2.y);
+	//float ky = -(p1.x - p2.x) / (p1.y - p2.y);
 
 }
 
 bool shouldBeThrown(vec3 s, vec3 t) {
 
-
+	if (s.y > MAX_HEIGHT && t.y > MAX_HEIGHT) return true;
+	if (s.y < -1.0f && t.y < -1.0f) return true;
 	if (s.x > -1.0f && s.x < MAX_WIDTH && s.y > -1.0f && s.y < MAX_HEIGHT) return false;
 	if (t.x > -1.0f && t.x < MAX_WIDTH && t.y > -1.0f && t.y < MAX_HEIGHT) return false;
+	if (t.z > -1.0f && t.z < 1.0f && t.z > -1.0f && t.z < 1.0f) return false;
 
 	if (s.x > t.x) swap(s, t);
 
@@ -64,14 +66,23 @@ bool shouldBeThrown(vec3 s, vec3 t) {
 	tnear = (-1.0f - s.x) / direction.x;
 	tfar = (MAX_WIDTH - s.x) / direction.x;
 
-	float	t1 = (-1.0f - s.y) / direction.y;
-	float	t2 = (MAX_HEIGHT - s.y) / direction.y;
+	if (tnear > tfar) swap(tnear, tfar);
+
+	float t1 = (-1.0f - s.y) / direction.y;
+	float t2 = (MAX_HEIGHT - s.y) / direction.y;
 
 	if (t1 > t2) swap(t1, t2);
 	if (t1 > tnear) tnear = t1;
 	if (t2 < tfar) tfar = t2;
 
-	if (t1 < t2 && t1 < len) return false;
-	return true;
+	t1 = (-1.0f - s.z) / direction.z;
+	t2 = (1.0f - s.z) / direction.z;
+
+	if (t1 > t2) swap(t1, t2);
+	if (t1 > tnear) tnear = t1;
+	if (t2 < tfar) tfar = t2;
+
+	if (tnear < tfar && tnear < len) return false;
+	return false;
 
 }

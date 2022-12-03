@@ -119,7 +119,7 @@ int main() {
 
 	//camera set up
 	//cam = new camera(vec3(0.0f, 0.0f, -5.0f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 0.0f);
-	cam = new camera(vec3(2.991081f, -0.398678f, 3.074921f), vec3(0.0f, 1.0f, 0.0f), 213.900330f, -0.499985f);
+	cam = new camera(vec3(0.738162f, 0.518383f, -1.616352f), vec3(0.0f, 1.0f, 0.0f), 746.304016, 39.900074f);
 	cam->MouseSensitivity = cursorSensitivity;
 	cam->MovementSpeed = camSpeed;
 	lastCursor = vec2(WIDTH * 0.5f, HEIGHT * 0.5f);
@@ -203,14 +203,14 @@ int main() {
 
 		processInput(window);
 		
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		for (int i = 0; i < WIDTH * HEIGHT; i++) {
 
-			PixelBuffer[i * 3] = (int)(255 * 0.2f);
-			PixelBuffer[i * 3 + 1] = (int)(255 * 0.3f);
-			PixelBuffer[i * 3 + 2] = (int)(255 * 0.3f);
+			PixelBuffer[i * 3] = (int)(255);
+			PixelBuffer[i * 3 + 1] = (int)(255);
+			PixelBuffer[i * 3 + 2] = (int)(255);
 
 		}
 		for (int i = 0; i < HEIGHT; i++) {
@@ -224,7 +224,7 @@ int main() {
 
 			vec4 tmp;
 			tmp = transform * vec4(mesh.position[i], 1.0f);
-			mesh.ndc_position[i] = vec3(tmp / tmp.w);
+			mesh.ndc_position[i] = vec3(tmp / fabs(tmp.w));
 
 		}
 
@@ -254,7 +254,6 @@ int main() {
 			if (fabs(polygon[i].plane.z) < EPSILON) continue;
 
 			int ymax = -1, ymin = HEIGHT;
-			float zl, xl;
 			for (int j = 0; j < 3; j++) {
 
 				edge[j][i].polygon_id = i;
@@ -268,42 +267,22 @@ int main() {
 
 				}
 				edge[j][i].dx = -RATIO * (s.x - t.x) / (s.y - t.y);
-				vec3 direction = t - s;
-				direction = normalize(direction);
 				if (s.x < t.x) attachToEdge(s, t);
 				else attachToEdge(t, s);
-				vec3 aDirection = t - s;
-				aDirection = normalize(aDirection);
 				int top = getYCoord(t.y), down = getYCoord(s.y);
+
 				edge[j][i].dy = top - down;
 				edge[j][i].x = getXCoord(t.x);
+				edge[j][i].z = t.z;
 				if (edge[j][i].dy == 0) {
 
 					edge[j][i].out = true;
 					continue;
 
 				}
-				if (top > ymax) {
-
-					ymax = top;
-					xl = getXCoord(t.x);
-					zl = t.z;
-
-				}
-				else if (top == ymax && getXCoord(t.x) < xl) {
-
-					xl = getXCoord(t.x);
-					zl = t.z;
-
-				}
+				if (top > ymax) ymax = top;
  				if (down < ymin) ymin = down;
 				edge[j][i].next = NULL;
-
-				if (top >= HEIGHT || top < 0) {
-
-					bool x = true;
-
-				}
 
 				if (ET[top] != NULL) edge[j][i].next = ET[top];
 				ET[top] = &edge[j][i];
@@ -313,7 +292,6 @@ int main() {
 			}
 
 			if (ymax == -1 || ymin == HEIGHT) continue;
-			polygon[i].zl = zl;
 			polygon[i].dzx = - 2.0f * polygon[i].plane.x / (polygon[i].plane.z * WIDTH);
 			polygon[i].dzy = 2.0f * polygon[i].plane.y / (polygon[i].plane.z * HEIGHT);
 			polygon[i].dy = ymax - ymin;
@@ -364,7 +342,7 @@ int main() {
 						current_AET->dyl = current_ET->dy;
 						current_AET->xl = current_ET->x;
 						current_AET->polygon_id = current_ET->polygon_id;
-						current_AET->zl = current_polygon->zl;
+						current_AET->zl = current_ET->z;
 						current_AET->dzx = current_polygon->dzx;
 						current_AET->dzy = current_polygon->dzy;
 						current_AET->next = NULL;
@@ -386,6 +364,7 @@ int main() {
 							swap(current_AET->xl, current_AET->xr);
 							swap(current_AET->dxl, current_AET->dxr);
 							swap(current_AET->dyl, current_AET->dyr);
+							current_AET->zl = current_ET->z;
 
 						}
 
@@ -398,6 +377,7 @@ int main() {
 							current_AET->dxl = current_ET->dx;
 							current_AET->dyl = current_ET->dy;
 							current_AET->xl = current_ET->x;
+							current_AET->zl = current_ET->z;
 
 						}
 						else {
@@ -474,7 +454,7 @@ int main() {
 
 				for (; l <= r && l <= WIDTH - 1; l++) {
 
-					if (z < zbuffer[l] - EPSILON && z < 1.0f) {
+					if (z < zbuffer[l] - EPSILON && z > -1.0f) {
 
 						zbuffer[l] = z;
 						PixelBuffer[(i * WIDTH + l) * 3] = polygon[current_AET->polygon_id].color.x;
@@ -489,9 +469,9 @@ int main() {
 
 				current_AET->dyl--;
 				current_AET->dyr--;
-				current_AET->xl += current_AET->dxl;
-				current_AET->xr += current_AET->dxr;
-				current_AET->zl += current_AET->dzx * current_AET->dxl + current_AET->dzy;
+				if (current_AET->dyl > 0) current_AET->xl += current_AET->dxl;
+				if (current_AET->dyr > 0) current_AET->xr += current_AET->dxr;
+				if (current_AET->dyl > 0) current_AET->zl += current_AET->dzx * current_AET->dxl + current_AET->dzy;
 				current_AET = current_AET->next;
 
 			}

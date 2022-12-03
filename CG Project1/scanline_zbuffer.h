@@ -26,14 +26,13 @@ struct active_edge_table {
 	float dzy;
 	int polygon_id;
 	struct active_edge_table* next;
-	struct active_polygon_table* active_polygon;
-	bool AC_edge;
 
 };
 
 struct edge_table {
 
 	float x;
+	float z;
 	float dx;
 	int dy;
 	int polygon_id;
@@ -49,7 +48,6 @@ struct polygon_table {
 	int dy;
 	float dzy;
 	float dzx;
-	float zl;
 	glm::vec3 color;
 	struct polygon_table* next; 
 	struct edge_table* e[3];
