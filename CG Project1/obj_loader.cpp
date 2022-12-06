@@ -135,6 +135,6 @@ void load_obj_file(const char* filename) {
 
 	}
 
-	printf("[Success] an obj file has been loaded!\n");
+	printf("[Success] an obj file has been loaded!\n\n");
 
 }

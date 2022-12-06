@@ -5,6 +5,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include "camera.h"
+#include "hierachical_zbuffer.h"
 
 using namespace glm;
 using namespace std;
@@ -84,5 +85,115 @@ bool shouldBeThrown(vec3 s, vec3 t) {
 
 	if (tnear < tfar && tnear < len) return false;
 	return false;
+
+}
+
+void hz_bottomRender(vec3 normal, vec3 topl, vec3 topr, vec3 down, hierachical_zbuffer* hz, unsigned char* pixelBuffer, vec3 color) {
+
+	if (topl.x > topr.x) swap(topl, topr);
+
+	if (topl.y > HEIGHT - 1 && down.y > HEIGHT - 1) return;
+	if (topl.y < 0 && down.y < 0) return;
+ 
+	float dxl = -(topl.x - down.x) / (topl.y - down.y);
+	float dxr = -(topr.x - down.x) / (topr.y - down.y);
+	float xl = topl.x;
+	float xr = topr.x;
+	float zl = topl.z;
+	float dzx = -2.0f * normal.x / (normal.z * WIDTH);
+	float dzy = 2.0f * normal.y / (normal.z * HEIGHT);
+	float y = topl.y;
+	int dy = (int)topl.y - (int)down.y;
+
+	if  ((int)y > HEIGHT - 1) {
+
+		int offset = (int)y - HEIGHT + 1;
+		y = HEIGHT - 1;
+		dy -= offset;
+		xl += dxl * offset;
+		xr += dxr * offset;
+		zl += (dxl * dzx + dzy) * offset;
+
+	}
+
+	while(dy > 0 && y >= 0) {
+
+
+		int l = (int)xl;
+		int r = (int)xr;
+		float z = zl;
+		if (l < 0) z += -l * dzx, l = 0;
+		r = std::min(WIDTH - 1, r);
+		while (l <= r) {
+
+			hz->UpdateDepth(l, y, z, pixelBuffer, color);
+			z += dzx;
+			l++;
+
+		}
+
+		dy--;
+		y--;
+		xl += dxl;
+		xr += dxr;
+		zl += dxl * dzx + dzy;
+
+
+	}
+
+}
+
+void hz_topRender(vec3 normal, vec3 top, vec3 downl, vec3 downr, hierachical_zbuffer* hz, unsigned char* pixelBuffer,vec3 color) {
+
+	if (downl.x > downr.x) swap(downl, downr);
+
+	if (top.y > HEIGHT - 1 && downl.y > HEIGHT - 1) return;
+	if (top.y < 0 && downl.y < 0) return;
+
+	float dxl = -(top.x - downl.x) / (top.y - downl.y);
+	float dxr = -(top.x - downr.x) / (top.y - downr.y);
+	float xl = top.x;
+	float xr = top.x;
+	float zl = top.z;
+	float dzx = -2.0f * normal.x / (normal.z * WIDTH);
+	float dzy = 2.0f * normal.y / (normal.z * HEIGHT);
+	float y = top.y;
+	int dy = (int)top.y - (int)downl.y;
+
+	if ((int)y > HEIGHT - 1) {
+
+		int offset = (int)y - HEIGHT + 1;
+		y = HEIGHT - 1;
+		dy -= offset;
+		xl += dxl * offset;
+		xr += dxr * offset;
+		zl += (dxl * dzx + dzy) * offset;
+
+	}
+
+	while (dy > 0 && y >= 0) {
+
+
+		int l = (int)xl;
+		int r = (int)xr;
+		float z = zl;
+		if (l < 0) z += -l * dzx, l = 0;
+		r = std::min(WIDTH - 1, r);
+		while (l <= r) {
+
+			hz->UpdateDepth(l, y, z, pixelBuffer, color);
+			z += dzx;
+			l++;
+
+		}
+
+		dy--;
+		y--;
+		xl += dxl;
+		xr += dxr;
+		zl += dxl * dzx + dzy;
+
+
+	}
 
 }

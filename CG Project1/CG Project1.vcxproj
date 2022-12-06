@@ -147,6 +147,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />
+    <ClInclude Include="hierachical_zbuffer.h" />
     <ClInclude Include="scanline_zbuffer.h" />
     <ClInclude Include="triangle.h" />
     <ClInclude Include="shader.h" />

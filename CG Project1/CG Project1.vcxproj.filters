@@ -50,6 +50,9 @@
     <ClInclude Include="scanline_zbuffer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="hierachical_zbuffer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="default.vs">
