@@ -144,11 +144,13 @@
     <ClCompile Include="obj_loader.cpp" />
     <ClCompile Include="openglFunc.cpp" />
     <ClCompile Include="shader.cpp" />
+    <ClCompile Include="toojpeg.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />
     <ClInclude Include="hierachical_zbuffer.h" />
     <ClInclude Include="scanline_zbuffer.h" />
+    <ClInclude Include="toojpeg.h" />
     <ClInclude Include="triangle.h" />
     <ClInclude Include="shader.h" />
     <ClInclude Include="vertex.h" />

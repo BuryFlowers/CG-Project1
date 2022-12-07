@@ -22,6 +22,8 @@ float cursorSensitivity = 0.1f;
 bool firstMouse = true;
 float blend = 0.2f;
 
+extern bool render;
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
 	glViewport(0, 0, width, height);
@@ -81,5 +83,7 @@ void processInput(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cam->ProcessKeyboard(RIGHT, deltaTime);
 
 	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) cam->PrintCameraConfig();
+	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) render = true;
+
 
 }
