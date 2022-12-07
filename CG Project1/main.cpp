@@ -15,6 +15,7 @@
 #include "triangle.h"
 #include "scanline_zbuffer.h"
 #include "hierachical_zbuffer.h"
+#include "toojpeg.h"
 
 #include <omp.h>
 #define NOMINMAX
@@ -25,7 +26,7 @@
 # define	TIMING_END(message) \
 	{double tmp_timing_finish = omp_get_wtime();\
 	double  tmp_timing_duration = tmp_timing_finish - tmp_timing_start;\
-	printf("%s: %2.5f ms           \r", (message), tmp_timing_duration * 1000);}}
+	printf("%s: %2.5f ms           \n\n", (message), tmp_timing_duration * 1000);}}
 
 
 using namespace glm;
@@ -57,22 +58,17 @@ edge_table* ET[HEIGHT];
 active_polygon_table* APT;
 active_edge_table* AET;
 float* zbuffer;
+octree* root;
 bool* lastVisibility;
 
+bool render = false;
 unsigned char* PixelBuffer = new unsigned char[WIDTH * HEIGHT * 3];
 vec3* color;
+// output file
+std::ofstream myFile;
 
-float vertices[] = {
-	//  ---- position ----    ---- color ----     - texcoord -
-		 1.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   
-		 1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   
-		-1.0f, -1.0f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   
-		-1.0f,  1.0f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f   
-};
-unsigned int indices[] = {
-		0, 1, 3, // first triangle
-		1, 2, 3  // second triangle
-};
+float* vertices;
+unsigned int* indices;
 
 extern void load_obj_file(const char* filename);
 
@@ -97,19 +93,15 @@ void HierachicalZbuffer();
 
 int main() {
 
-	load_obj_file("data/bunny_1k.obj");
+	load_obj_file("data/Georges Gardet.obj");
 
 	mesh.position = new vec3[position_queue.size()];
 	mesh.ndc_position = new vec3[position_queue.size()];
 	for (int i = 0; i < position_queue.size(); i++) mesh.position[i] = position_queue[i];
-
 	mesh.normal = new vec3[normal_queue.size()];
 	for (int i = 0; i < normal_queue.size(); i++) mesh.normal[i] = normal_queue[i];
-
-
 	mesh.uv = new vec2[uv_queue.size()];
 	for (int i = 0; i < uv_queue.size(); i++) mesh.uv[i] = uv_queue[i];
-
 	mesh.triangle_indices = new triangle[indices_queue.size()];
 	lastVisibility = new bool[indices_queue.size()];
 	for (int i = 0; i < indices_queue.size(); i++) mesh.triangle_indices[i] = indices_queue[i], lastVisibility[i] = true;
@@ -126,9 +118,34 @@ int main() {
 
 	zbuffer = new float[WIDTH];
 
+	vec3 AABB_v1 = mesh.position[0], AABB_v2 = mesh.position[0];
+	for (int i = 1; i < position_queue.size(); i++) {
+
+		vec3 tmp = mesh.position[i];
+		if (AABB_v1.x > tmp.x) AABB_v1.x = tmp.x;
+		if (AABB_v1.y > tmp.y) AABB_v1.y = tmp.y;
+		if (AABB_v1.z > tmp.z) AABB_v1.z = tmp.z;
+		if (AABB_v2.x < tmp.x) AABB_v2.x = tmp.x;
+		if (AABB_v2.y < tmp.y) AABB_v2.y = tmp.y;
+		if (AABB_v2.z < tmp.z) AABB_v2.z = tmp.z;
+
+	}
+
+	int step = 1;
+	int maxDeep = 0;
+	while (step < WIDTH && step < HEIGHT) {
+
+		step *= 2;
+		maxDeep++;
+
+	}
+	root = new octree(AABB_v1, AABB_v2, maxDeep);
+	for (int i = 0; i < indices_queue.size(); i++) root->AddPolygon(i, mesh.position, mesh.triangle_indices);
+	printf("[Success] the octree has been built!\n\n");
+
 	//camera set up
-	//cam = new camera(vec3(0.0f, 0.0f, -0.5f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 25.0f);
-	cam = new camera(vec3(-3.274809, -0.901280, -5.230831), vec3(0.0f, 1.0f, 0.0f), 55.899918, 24.500013);
+	cam = new camera(vec3(0.0f, 0.0f, -0.5f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 25.0f);
+	//cam = new camera(vec3(-3.274809, -0.901280, -5.230831), vec3(0.0f, 1.0f, 0.0f), 55.899918, 24.500013);
 	cam->MouseSensitivity = cursorSensitivity;
 	cam->MovementSpeed = camSpeed;
 	lastCursor = vec2(WIDTH * 0.5f, HEIGHT * 0.5f);
@@ -160,9 +177,30 @@ int main() {
 	glfwSetWindowSizeCallback(window, framebuffer_size_callback);
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	Shader shader("default.vs", "default.fs");
+
+	vertices = new float[position_queue.size() * 6];
+	for (int i = 0; i < position_queue.size(); i++) {
+
+		vertices[i * 6 + 0] = mesh.position[i].x;
+		vertices[i * 6 + 1] = mesh.position[i].y;
+		vertices[i * 6 + 2] = mesh.position[i].z;
+		vertices[i * 6 + 3] = (rand() % 255) / 255.0f;
+		vertices[i * 6 + 4] = (rand() % 255) / 255.0f;
+		vertices[i * 6 + 5] = (rand() % 255) / 255.0f;
+
+	}
+
+	indices = new unsigned int[indices_queue.size() * 3];
+	for (int i = 0; i < indices_queue.size(); i++) {
+
+		indices[i * 3 + 0] = mesh.triangle_indices[i].A();
+		indices[i * 3 + 1] = mesh.triangle_indices[i].B();
+		indices[i * 3 + 2] = mesh.triangle_indices[i].C();
+
+	}
 
 	// init VBO VAO EBO
 	unsigned int VBO, VAO, EBO;
@@ -173,86 +211,58 @@ int main() {
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * position_queue.size() * 6, vertices, GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indices_queue.size() * 3, indices, GL_STATIC_DRAW);
 
 	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 	// color attribute
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
-	// texture coord attribute
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
 
-	//create texture canvas
-	unsigned int texture;
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	// set the texture wrapping parameters
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	// set texture filtering parameters
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	// set sampler to sample texture0 
-	shader.use();
-	glActiveTexture(GL_TEXTURE0);
-	shader.setInt("texture1", 0);
-
-	glDisable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
 
 	while (!glfwWindowShouldClose(window)) {
 
-		TIMING_BEGIN
-
 		processInput(window);
 		
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		for (int i = 0; i < WIDTH * HEIGHT; i++) {
+		mat4 viewMat = cam->GetViewMatrix();
+		mat4 perspectiveMat = perspective(radians(cam->Zoom), RATIO, 0.1f, 100.0f);
 
-			PixelBuffer[i * 3] = (int)(255);
-			PixelBuffer[i * 3 + 1] = (int)(255);
-			PixelBuffer[i * 3 + 2] = (int)(255);
+		shader.setMat4("view", viewMat);
+		shader.setMat4("perspective", perspectiveMat);
+
+		if (render) {
+
+			mat4 transform = perspectiveMat * viewMat;
+			for (int i = 0; i < position_queue.size(); i++) {
+
+				vec4 tmp;
+				tmp = transform * vec4(mesh.position[i], 1.0f);
+				mesh.ndc_position[i] = vec3(tmp / fabs(tmp.w));
+
+			}
+
+			ScanlineZbuffer();
+			SimpleHierachicalZbuffer();
+			HierachicalZbuffer();
+			render = false;
 
 		}
-		for (int i = 0; i < HEIGHT; i++) {
 
-			PT[i] = NULL;
-			ET[i] = NULL;
-
-		}
-		
-		mat4 transform = perspective(radians(cam->Zoom), RATIO, 0.1f, 100.0f) * cam->GetViewMatrix();
-		for (int i = 0; i < position_queue.size(); i++) {
-
-			vec4 tmp;
-			tmp = transform * vec4(mesh.position[i], 1.0f);
-			mesh.ndc_position[i] = vec3(tmp / fabs(tmp.w));
-
-		}
-
-		HierachicalZbuffer();
-		//SimpleHierachicalZbuffer();
-		//ScanlineZbuffer();
-
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, PixelBuffer);
-
-		// render canvas
+		// render object
 		shader.use();
 		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
+		glDrawElements(GL_TRIANGLES, indices_queue.size() * 3, GL_UNSIGNED_INT, 0);
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 
-		TIMING_END("Time per frame")
 	}
 
 	glfwTerminate();
@@ -260,8 +270,53 @@ int main() {
 
 }
 
+// write a single byte compressed by tooJpeg
+void myOutput(unsigned char byte)
+{
+	myFile << byte;
+}
+
+void SaveJPEG(const char* filename, unsigned char* PixelBuffer) {
+
+	for (int j = 0; j < HEIGHT / 2; j++) {
+
+		int k = HEIGHT - 1 - j;
+		for (int i = 0; i < WIDTH; i++) {
+			
+			swap(PixelBuffer[(k * WIDTH + i) * 3], PixelBuffer[(j * WIDTH + i) * 3]);
+			swap(PixelBuffer[(k * WIDTH + i) * 3 + 1], PixelBuffer[(j * WIDTH + i) * 3 + 1]);
+			swap(PixelBuffer[(k * WIDTH + i) * 3 + 2], PixelBuffer[(j * WIDTH + i) * 3 + 2]);
+
+		}
+
+	}
+
+	myFile = std::ofstream(filename, std::ios_base::out | std::ios_base::binary);
+	const bool isRGB = true;  // true = RGB image, else false = grayscale
+	const auto quality = 90;    // compression quality: 0 = worst, 100 = best, 80 to 90 are most often used
+	const bool downsample = false; // false = save as YCbCr444 JPEG (better quality), true = YCbCr420 (smaller file)
+	const char* comment = "result image"; // arbitrary JPEG comment
+	auto ok = TooJpeg::writeJpeg(myOutput, PixelBuffer, WIDTH, HEIGHT, isRGB, quality, downsample, comment);
+
+}
+
 void ScanlineZbuffer() {
 
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+
+		PixelBuffer[i * 3] = (int)(255);
+		PixelBuffer[i * 3 + 1] = (int)(255);
+		PixelBuffer[i * 3 + 2] = (int)(255);
+
+	}
+	for (int i = 0; i < HEIGHT; i++) {
+
+		PT[i] = NULL;
+		ET[i] = NULL;
+
+	}
+
+	TIMING_BEGIN
 	polygon_table* polygon = new polygon_table[indices_queue.size()];
 	edge_table* edge[3];
 	edge[0] = new edge_table[indices_queue.size()];
@@ -565,10 +620,22 @@ void ScanlineZbuffer() {
 
 	}
 
+	TIMING_END("Scan line time")
+	SaveJPEG("./result/scanline_zbuffer.jpeg", PixelBuffer);
+	
 }
 
 void SimpleHierachicalZbuffer() {
 
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+
+		PixelBuffer[i * 3] = (int)(255);
+		PixelBuffer[i * 3 + 1] = (int)(255);
+		PixelBuffer[i * 3 + 2] = (int)(255);
+
+	}
+
+	TIMING_BEGIN
 	int cutNum = 0;
 	hierachical_zbuffer* hz = new hierachical_zbuffer(WIDTH, HEIGHT);
 	for (int i = 0; i < indices_queue.size(); i++) {
@@ -632,70 +699,35 @@ void SimpleHierachicalZbuffer() {
 	}
 
 	delete(hz);
-	printf("Cut triangles: %d ", cutNum);
+	
+	printf("Cut triangles: %d \n", cutNum);
+	TIMING_END("Simple hierachical zbuffer time")
+	SaveJPEG("./result/simple_hierachical_zbuffer.jpeg", PixelBuffer);
 
 }
 
 void HierachicalZbuffer() {
 
-	vec3 AABB_v1 = vec3(1.0f), AABB_v2 = vec3(-1.0f);
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
 
-	for (int i = 0; i < position_queue.size(); i++) {
-
-		vec3 tmp = mesh.ndc_position[i];
-		if (AABB_v1.x > tmp.x) AABB_v1.x = tmp.x;
-		if (AABB_v1.y > tmp.y) AABB_v1.y = tmp.y;
-		if (AABB_v1.z > tmp.z) AABB_v1.z = tmp.z;
-		if (AABB_v2.x < tmp.x) AABB_v2.x = tmp.x;
-		if (AABB_v2.y < tmp.y) AABB_v2.y = tmp.y;
-		if (AABB_v2.z < tmp.z) AABB_v2.z = tmp.z;
+		PixelBuffer[i * 3] = (int)(255);
+		PixelBuffer[i * 3 + 1] = (int)(255);
+		PixelBuffer[i * 3 + 2] = (int)(255);
 
 	}
 
-	if (AABB_v1.x < -1.0) AABB_v1.x = -1.0f;
-	if (AABB_v1.y < -1.0) AABB_v1.y = -1.0f;
-	if (AABB_v1.z < -1.0) AABB_v1.z = -1.0f;
-	if (AABB_v2.x > 1.0) AABB_v2.x = 1.0f;
-	if (AABB_v2.y > 1.0) AABB_v2.y = 1.0f;
-	if (AABB_v2.z > 1.0) AABB_v2.z = 1.0f;
-
-	int step = 1;
-	int maxDeep = 0;
-	while (step < WIDTH && step < HEIGHT) {
-
-		step *= 2;
-		maxDeep++;
-
-	}
+	mat4 transform = perspective(radians(cam->Zoom), RATIO, 0.1f, 100.0f) * cam->GetViewMatrix();
+	TIMING_BEGIN
 
 	int cutNum = 0;
-	int tmp = 0;
-	bool* currentVisibility = new bool[indices_queue.size()];
-	memset(currentVisibility, 0, sizeof(bool) * indices_queue.size());
-	octree* root = new octree(vec3(-1.0f), vec3(1.0f), maxDeep);
-	for (int i = 0; i < indices_queue.size(); i++) 
-		if (lastVisibility[i] == true) root->AddPolygon(i, mesh.ndc_position, mesh.triangle_indices);
-
 	hierachical_zbuffer* hz = new hierachical_zbuffer(WIDTH, HEIGHT);
-	root->Render(mesh, hz, cutNum, PixelBuffer, color, currentVisibility);
-	root->Clear();
-	delete(root);
-
-	root = new octree(vec3(-1.0f), vec3(1.0f), maxDeep);
-	for (int i = 0; i < indices_queue.size(); i++)
-		if (lastVisibility[i] == false) root->AddPolygon(i, mesh.ndc_position, mesh.triangle_indices);
-
-	//root->BuildTree(mesh.ndc_position, mesh.triangle_indices);
-	root->Render(mesh, hz, cutNum, PixelBuffer, color, currentVisibility);
-	root->Clear();
-	delete(root);
-
-	printf("Cut triangles: %d  ", cutNum);
-	//memcpy(lastVisibility, currentVisibility, sizeof(bool) * indices_queue.size());
-	
-	for (int i = 0; i < indices_queue.size(); i++)
-		lastVisibility[i] = currentVisibility[i];
-	delete[](currentVisibility);
+	root->Render(mesh, hz, cutNum, PixelBuffer, color, transform, true);
+	root->Render(mesh, hz, cutNum, PixelBuffer, color, transform, false);
 	delete(hz);
+
+	printf("Cut triangles: %d \n", cutNum);
+	TIMING_END("Hierachical zbuffer time")
+
+	SaveJPEG("./result/hierachical_zbuffer.jpeg", PixelBuffer);
 
 }

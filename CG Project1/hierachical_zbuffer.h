@@ -163,24 +163,51 @@ public:
 
 		for (int i = 0; i < 8; i++) children[i] = NULL;
 		polygons.clear();
+		visibility.clear();
 		center = (v1 + v2) * 0.5f;
 		length = center - v1;
 		maxDeep = max_deep;
 
 	}
 
-	void AddPolygon(int x, vec3* ndc_position, triangle* triangles) {
+	void AABB(mat4& transform, vec3& minxy, vec3& maxxy) {
 
+		for (int i = 0; i < 8; i++) {
+
+			vec4 v = vec4(center, 1.0f);
+			v.x += direction_x[i] * length.x;
+			v.y += direction_y[i] * length.y;
+			v.z += direction_z[i] * length.z;
+			v = transform * v;
+			v /= fabs(v.w);
+				
+			v.x = (v.x + 1.0f) * WIDTH * 0.5f;
+			v.y = (v.y + 1.0f) * HEIGHT * 0.5f;
+			if (minxy.x > v.x || i == 0) minxy.x = v.x;
+			if (minxy.y > v.y || i == 0) minxy.y = v.y;
+			if (minxy.z > v.z || i == 0) minxy.z = v.z;
+			if (maxxy.x < v.x || i == 0) maxxy.x = v.x;
+			if (maxxy.y < v.y || i == 0) maxxy.y = v.y;
+			if (maxxy.z < v.z || i == 0) maxxy.z = v.z;
+
+		}
+
+	}
+
+	void AddPolygon(int x, vec3* position, triangle* triangles) {
+
+		polygonNum++;
 		if (maxDeep == 0) {
 
 			polygons.push_back(x);
+			visibility.push_back(true);
 			return;
 
 		}
 		vec3 v[3];
-		v[0] = ndc_position[triangles[x].A()];
-		v[1] = ndc_position[triangles[x].B()];
-		v[2] = ndc_position[triangles[x].C()];
+		v[0] = position[triangles[x].A()];
+		v[1] = position[triangles[x].B()];
+		v[2] = position[triangles[x].C()];
 
 		vec3 AABBv1 = v[0], AABBv2 = v[0];
 		for (int j = 1; j < 3; j++) {
@@ -193,13 +220,6 @@ public:
 			if (AABBv2.z < v[j].z) AABBv2.z = v[j].z;
 
 		}
-
-		/*AABBv1.x = clamp(AABBv1.x, center.x - length.x, center.x + length.x);
-		AABBv1.y = clamp(AABBv1.y, center.y - length.y, center.y + length.y);
-		AABBv1.z = clamp(AABBv1.z, center.z - length.z, center.z + length.z);
-		AABBv2.x = clamp(AABBv2.x, center.x - length.x, center.x + length.x);
-		AABBv2.y = clamp(AABBv2.y, center.y - length.y, center.y + length.y);
-		AABBv2.z = clamp(AABBv2.z, center.z - length.z, center.z + length.z);*/
 
 		for (int j = 0; j < 8; j++) {
 
@@ -217,7 +237,7 @@ public:
 				if (box_v1.x <= AABBv2.x && AABBv2.x <= box_v2.x && box_v1.y <= AABBv2.y && AABBv2.y <= box_v2.y && box_v1.z <= AABBv2.z && AABBv2.z <= box_v2.z) {
 
 					if (children[j] == NULL) children[j] = new octree(box_v1, box_v2, maxDeep - 1);
-					children[j]->AddPolygon(x, ndc_position, triangles);
+					children[j]->AddPolygon(x, position, triangles);
 					return;
 
 				}
@@ -228,91 +248,45 @@ public:
 		}
 
 		polygons.push_back(x);
+		visibility.push_back(true);
 
 	}
 
-	int PolygonNum() {
+	void Render(triangles& mesh, hierachical_zbuffer* hz, int& cutNum, unsigned char* PixelBuffer, vec3* color, mat4& transform, bool mode) {
 
-		return polygons.size();
+		vec3 minxy, maxxy;
+		this->AABB(transform, minxy, maxxy);
+	
+		bool flag = hz->checkVisibilyty(vec2(minxy), vec2(maxxy), center.z - length.z);
 
-	}
+		if (!flag) {
 
-	/*void BuildTree(vec3* ndc_position, triangle* triangles) {
-
-		if (maxDeep == 0) return;
-		for (int i = 0; i < 8; i++) children[i] = NULL;
-		int size = polygons.size();
-		for (int i = 0; i < size; i++) {
-
-			int index = polygons[i];
-			vec3 v[3]; 
-			v[0] = ndc_position[triangles[index].A()];
-			v[1] = ndc_position[triangles[index].B()];
-			v[2] = ndc_position[triangles[index].C()];
-
-			vec3 p = v[0];
-			for (int j = 1; j < 3; j++) {
-
-				if (p.x > v[j].x) p.x = v[j].x;
-				if (p.y > v[j].y) p.y = v[j].y;
-				if (p.z > v[j].z) p.z = v[j].z;
-
-			}
-
-			p.x = clamp(p.x, center.x - length.x, center.x + length.x);
-			p.y = clamp(p.y, center.y - length.y, center.y + length.y);
-			p.z = clamp(p.z, center.z - length.z, center.z + length.z);
-
-			for (int j = 0; j < 8; j++) {
-
-				vec3 box_v1 = center;
-				vec3 box_v2 = center;
-				box_v2.x += length.x * direction_x[j];
-				box_v2.y += length.y * direction_y[j];
-				box_v2.z += length.z * direction_z[j];
-				if (box_v1.x > box_v2.x) std::swap(box_v1.x, box_v2.x);
-				if (box_v1.y > box_v2.y) std::swap(box_v1.y, box_v2.y);
-				if (box_v1.z > box_v2.z) std::swap(box_v1.z, box_v2.z);
-
-				if (box_v1.x <= p.x && p.x <= box_v2.x && box_v1.y <= p.y && p.y <= box_v2.y && box_v1.z <= p.z && p.z <= box_v2.z) {
-
-					if (children[j] == NULL) children[j] = new octree(box_v1, box_v2, maxDeep - 1);
-					children[j]->AddPolygon(index);
-					break;
-
-				}
-
-			}
+			cutNum += polygonNum;
+			return;
 
 		}
 
 		for (int i = 0; i < 8; i++)
-			if (children[i] != NULL && children[i]->PolygonNum() > 3) children[i]->BuildTree(ndc_position, triangles);
+			if (children[i] != NULL)
+				for (int j = i + 1; j < 8; j++) 
+					if (children[j] != NULL) {
 
-	}*/
+						vec3 iminxy, imaxxy, jminxy, jmaxxy;
+						children[i]->AABB(transform, iminxy, imaxxy);
+						children[j]->AABB(transform, jminxy, jmaxxy);
+						if (iminxy.z > jminxy.z) std::swap(children[i], children[j]);
 
-	void Render(triangles& mesh, hierachical_zbuffer* hz, int& cutNum, unsigned char* PixelBuffer, vec3* color, bool* currentVisibility) {
+					}
 
-		vec2 minxy = vec2(center - length), maxxy = vec2(center + length);
-		minxy.x = (minxy.x + 1.0f) * WIDTH * 0.5f;
-		minxy.y = (minxy.y + 1.0f) * HEIGHT * 0.5f;
-		maxxy.x = (maxxy.x + 1.0f) * WIDTH * 0.5f;
-		maxxy.y = (maxxy.y + 1.0f) * HEIGHT * 0.5f;
-		
-		bool flag = hz->checkVisibilyty(minxy, maxxy, center.z - length.z);
+		for (int i = 0; i < 4; i++)
+			if (children[i] != NULL) children[i]->Render(mesh, hz, cutNum, PixelBuffer, color, transform, mode);
 
-		if (flag) {
-
-			for (int i = 0; i < 4; i++)
-				if (children[i] != NULL) children[i]->Render(mesh, hz, cutNum, PixelBuffer, color, currentVisibility);
-			cutNum++;
-
-		}
 
 		for (int x = 0; x < polygons.size(); x++) {
 
+			if (visibility[x] != mode) continue;
 			int i = polygons[x];
-			currentVisibility[i] = false;
+			visibility[x] = false;
 			vec3 v[3];
 			v[0] = mesh.ndc_position[mesh.triangle_indices[i].A()];
 			v[1] = mesh.ndc_position[mesh.triangle_indices[i].B()];
@@ -353,7 +327,7 @@ public:
 
 			}
 
-			currentVisibility[i] = true;
+			visibility[x] = true;
 
 			if ((int)v[0].y == (int)v[1].y) hz_bottomRender(normal, v[0], v[1], v[2], hz, PixelBuffer, color[i]);
 			else if ((int)v[1].y == (int)v[2].y) hz_topRender(normal, v[0], v[1], v[2], hz, PixelBuffer, color[i]);
@@ -373,13 +347,9 @@ public:
 
 		}
 
-		if (flag) {
+		for (int i = 4; i < 8; i++)
+				if (children[i] != NULL) children[i]->Render(mesh, hz, cutNum, PixelBuffer, color, transform, mode);
 
-			for (int i = 4; i < 8; i++)
-				if (children[i] != NULL) children[i]->Render(mesh, hz, cutNum, PixelBuffer, color, currentVisibility);
-			cutNum++;
-
-		}
 	}
 
 	void Clear() {
@@ -393,6 +363,7 @@ public:
 			}
 		
 		polygons.clear();
+		visibility.clear();
 
 	}
 
@@ -404,7 +375,9 @@ private:
 	vec3 center;
 	vec3 length;
 	int maxDeep;
+	int polygonNum = 0;
 	std::vector<int> polygons;
+	std::vector<bool> visibility;
 
 };
 #endif // !HIERACHICAL_ZBUFFER
