@@ -144,8 +144,8 @@ int main() {
 	printf("[Success] the octree has been built!\n\n");
 
 	//camera set up
-	cam = new camera(vec3(0.0f, 0.0f, -0.5f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 25.0f);
-	//cam = new camera(vec3(-3.274809, -0.901280, -5.230831), vec3(0.0f, 1.0f, 0.0f), 55.899918, 24.500013);
+	//cam = new camera(vec3(0.0f, 0.0f, -0.5f), vec3(0.0f, 1.0f, 0.0f), 90.0f, 25.0f);
+	cam = new camera(vec3(-3.274809, -0.901280, -5.230831), vec3(0.0f, 1.0f, 0.0f), 55.899918, 24.500013);
 	cam->MouseSensitivity = cursorSensitivity;
 	cam->MovementSpeed = camSpeed;
 	lastCursor = vec2(WIDTH * 0.5f, HEIGHT * 0.5f);
