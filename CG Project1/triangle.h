@@ -70,7 +70,7 @@ struct plane {
 
 };
 
-struct triangles {
+struct triangle_mesh {
 
 	vec3* position;
 	vec3* ndc_position;
