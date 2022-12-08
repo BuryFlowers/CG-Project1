@@ -684,7 +684,7 @@ void ScanlineZbuffer() {
 	}
 
 	TIMING_END("Scan line time")
-	SaveJPEG("./result/scanline_zbuffer.jpeg", PixelBuffer);
+	SaveJPEG("./result/scanline_zbuffer.jpg", PixelBuffer);
 	
 }
 
@@ -777,7 +777,7 @@ void SimpleHierachicalZbuffer() {
 	
 	printf("Cut triangles: %d \n", cutNum);
 	TIMING_END("Simple hierachical zbuffer time")
-	SaveJPEG("./result/simple_hierachical_zbuffer.jpeg", PixelBuffer);
+	SaveJPEG("./result/simple_hierachical_zbuffer.jpg", PixelBuffer);
 
 }
 
@@ -807,6 +807,6 @@ void HierachicalZbuffer() {
 	printf("Cut triangles: %d \n", cutNum);
 	TIMING_END("Hierachical zbuffer time")
 
-	SaveJPEG("./result/hierachical_zbuffer.jpeg", PixelBuffer);
+	SaveJPEG("./result/hierachical_zbuffer.jpg", PixelBuffer);
 
 }
